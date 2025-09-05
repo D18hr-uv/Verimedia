@@ -157,3 +157,62 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+
+@app.post("/analyze_url")
+async def analyze_url(payload: URLPayload):
+    url = payload.url
+    content = get_page_content(url)
+    
+    if "error" in content:
+        return {"error": content["error"]}
+        
+    text = content.get("text", "")
+    images = content.get("images", [])
+
+    analysis_results = {
+        "text_summary": None,
+        "text_sentiment": None,
+        "image_analysis": []
+    }
+
+    # Step 2: Analyze the text
+    # ... (text analysis code, no changes needed here)
+        
+    # Step 3: Analyze the images
+    if images and vqa_pipeline and clip_classifier:
+        first_image_url = images[0]
+        try:
+            # Download the image data
+            image_response = requests.get(first_image_url)
+            image_response.raise_for_status()
+
+            # Create a BytesIO object from the image content
+            image_stream = BytesIO(image_response.content)
+            
+            # Open the image with Pillow
+            pil_image = Image.open(image_stream).convert("RGB") # Convert to RGB to handle various formats
+
+            # Perform Visual Question Answering
+            vqa_question = "What is in this image?"
+            vqa_answer = vqa_pipeline(image=pil_image, question=vqa_question)
+            
+            # Perform Zero-Shot Image Classification
+            candidate_labels = ["photograph", "AI-generated image", "drawing", "screenshot"]
+            classification_result = clip_classifier(image=pil_image, candidate_labels=candidate_labels)
+            
+            # Encode image for display on the frontend
+            base64_img = download_and_base64_image(first_image_url)
+
+            analysis_results["image_analysis"] = [{
+                "url": first_image_url,
+                "base64_image": base64_img,
+                "vqa_answer": vqa_answer[0]['answer'] if vqa_answer else "N/A",
+                "zero_shot_classification": classification_result
+            }]
+
+        except Exception as e:
+            analysis_results["image_analysis"] = [{"error": f"Failed to analyze image: {e}"}]
+
+    return analysis_results

@@ -1,49 +1,122 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import axios from 'axios';
-import reactLogo from './assets/react.svg';
-import viteLogo from '/vite.svg';
 import './App.css';
 
 function App() {
-  const [backendMessage, setBackendMessage] = useState('Connecting to backend...');
-  const [isLoading, setIsLoading] = useState(true);
+  const [url, setUrl] = useState('');
+  const [results, setResults] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const fetchBackendMessage = async () => {
-      try {
-        const response = await axios.get('http://localhost:8000');
-        setBackendMessage(response.data.message);
-      } catch (error) {
-        console.error('Error fetching data from backend:', error);
-        setBackendMessage('Failed to connect to backend. Is the server running?');
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setResults(null);
+    setError(null);
 
-    fetchBackendMessage();
-  }, []);
+    try {
+      const response = await axios.post('http://localhost:8000/analyze_url', { url });
+      setResults(response.data);
+    } catch (err) {
+      console.error('API Error:', err);
+      setError('An error occurred. Please check the URL and try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
-    <>
-      <div>
-        <a href="https://vitejs.dev" target="_blank" rel="noopener noreferrer">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank" rel="noopener noreferrer">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>VeriMedia</h1>
-      <div className="card">
-        <p>
-          <strong>Backend Status:</strong> {isLoading ? 'Loading...' : backendMessage}
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <div className="App">
+      <header className="App-header">
+        <h1>VeriMedia</h1>
+        <p>Analyze any URL for authenticity and key insights.</p>
+      </header>
+      
+      <main>
+        <form onSubmit={handleSubmit} className="url-form">
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="Enter URL to analyze (e.g., a news article)"
+            required
+            disabled={isLoading}
+          />
+          <button type="submit" disabled={isLoading}>
+            {isLoading ? 'Analyzing...' : 'Analyze'}
+          </button>
+        </form>
+
+        {isLoading && <p>Loading...</p>}
+        {error && <p className="error-message">{error}</p>}
+        
+        {results && (
+          <div className="results-container">
+            <h2>Analysis Results</h2>
+            
+            {results.text_summary && (
+              <div className="analysis-card">
+                <h3>Text Summary</h3>
+                <p>{results.text_summary}</p>
+              </div>
+            )}
+            
+            {results.text_sentiment && (
+              <div className="analysis-card">
+                <h3>Text Sentiment</h3>
+                <p>
+                  Sentiment: <strong>{results.text_sentiment.label}</strong>
+                </p>
+                <p>
+                  Confidence: <strong>{results.text_sentiment.score.toFixed(2)}</strong>
+                </p>
+              </div>
+            )}
+            
+            {results.image_analysis.length > 0 && (
+              <div className="analysis-card">
+                <h3>Image Analysis</h3>
+                {results.image_analysis.map((img, index) => (
+                  <div key={index} className="image-result">
+                    {img.base64_image && (
+                      <img 
+                        src={`data:image/jpeg;base64,${img.base64_image}`} 
+                        alt="Analyzed content" 
+                        className="analyzed-image" 
+                      />
+                    )}
+                    {img.error && <p className="error-message">Error: {img.error}</p>}
+                    
+                    {img.vqa_answer && (
+                      <p>
+                        <strong>What's in this image?</strong> {img.vqa_answer}
+                      </p>
+                    )}
+                    
+                    {img.zero_shot_classification && (
+                      <div>
+                        <p><strong>Image Type:</strong></p>
+                        <ul>
+                          {img.zero_shot_classification.map((item, i) => (
+                            <li key={i}>
+                              {item.label}: <strong>{item.score.toFixed(2)}</strong>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!results.text_summary && !results.image_analysis.length && (
+              <p>No content found for analysis.</p>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
   );
 }
 
